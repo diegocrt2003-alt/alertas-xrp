@@ -2,8 +2,9 @@ name: Alertas XRP
 
 on:
   schedule:
-    # Cada 10 min en horario Peru 9-12 y 15-20 (en UTC: 14-16 y 20-00)
-    - cron: "*/10 14-16,20-23,0 * * *"
+    # Cada 10 min, todo el dia. Las COMPRAS solo se avisan en horario Peru 9-12 y 15-20;
+    # las VENTAS se vigilan siempre que tengas posicion.
+    - cron: "*/10 * * * *"
   workflow_dispatch:      # boton "Run workflow" para correrlo a mano
     inputs:
       prueba:
@@ -45,5 +46,6 @@ jobs:
             git config user.email "alertas-bot@users.noreply.github.com"
             git add alertas/estado.json
             git commit -m "estado de alertas"
+            git pull --rebase
             git push
           fi
