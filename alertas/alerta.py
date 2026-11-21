@@ -1,4 +1,4 @@
-﻿"""Alertas de XRP/USDT por Telegram: "COMPRA AHORA" y "VENDE AHORA".
+"""Alertas de XRP/USDT por Telegram: "COMPRA AHORA" y "VENDE AHORA".
 No opera ni necesita claves de Binance: solo lee datos publicos.
 
 Le escribes a tu bot de Telegram:
@@ -134,7 +134,7 @@ def procesar_comandos(estado, precio_actual):
 
 
 # ---------------- Venta ----------------
-def revisar_venta(estado, v5, v1h):
+def revisar_venta(estado, v5, v1h, btc):
     p = estado["posicion"]
     entrada, desde = p["precio"], p["desde"]
     tp, sl = niveles(entrada)
@@ -162,6 +162,11 @@ def revisar_venta(estado, v5, v1h):
     if len(v1h) > 200 and e50[-1] < e200[-1] * 0.97:
         motivos.append(("tendencia", "La tendencia de 1 hora se esta derrumbando."))
 
+    c1, _ = senal.btc_cambios(btc, v5[-1]["fin"]) if btc else (None, None)
+    if c1 is not None and c1 <= senal.BTC_VENTA_1H:
+        hora = int(v5[-1]["t"] // 3_600_000)
+        motivos.append((f"btc{hora}", f"Bitcoin se esta derrumbando ({c1:+.1%} en 1 hora); XRP suele seguirlo."))
+
     mala = senal.noticia_mala()
     if mala:
         motivos.append((f"noticia:{mala[:60]}", f"Noticia negativa: {mala}"))
@@ -180,8 +185,9 @@ def revisar_venta(estado, v5, v1h):
 
 
 # ---------------- Compra ----------------
-def revisar_compra(estado, v5, v1h, fng, ahora):
-    senales = senal.calcular_senales(v5, v1h, fng)
+def revisar_compra(estado, v5, v1h, fng, ahora, btc, deriv):
+    funding = [(0, deriv["funding"])] if deriv.get("funding") is not None else None
+    senales = senal.calcular_senales(v5, v1h, fng, btc, funding)
     if not senales:
         print("Sin senal de compra por ahora."); return
     i, rsi_val, vol_x = senales[-1]
@@ -229,17 +235,23 @@ def main():
     except Exception:
         fng = None
 
+    try:
+        btc = {"velas": [x for x in senal.velas_btc("5m", 100) if x["fin"] < ahora]}
+    except Exception:
+        btc = None
+    deriv = senal.derivados_ahora()
+
     estado = cargar_estado()
     procesar_comandos(estado, v5[-1]["c"])
     if estado.get("posicion"):
-        revisar_venta(estado, v5, v1h)
+        revisar_venta(estado, v5, v1h, btc)
     else:
-        revisar_compra(estado, v5, v1h, fng, ahora)
+        revisar_compra(estado, v5, v1h, fng, ahora, btc, deriv)
     # Cambia una vez al dia: asi GitHub ve actividad y no apaga el horario a los 60 dias
     estado["ultimo_dia_revisado"] = datetime.now(senal.PERU).date().isoformat()
     guardar_estado(estado)
     try:
-        panel.exportar(estado, v5, v1h, fng)
+        panel.exportar(estado, v5, v1h, fng, btc, deriv)
         print("Panel actualizado (docs/datos.json).")
     except Exception as e:
         print(f"No pude actualizar el panel: {e}")

@@ -130,7 +130,8 @@ def en_horario(ms):
     return any(a <= h < b for a, b in HORAS_PERU)
 
 
-def calcular_senales(v5, v1h, fng):
+def calcular_senales(v5, v1h, fng, btc=None, funding=None):
+    """btc = {"velas": velas de 5m de BTC}; funding = lista de (tiempo_ms, tasa)."""
     """Devuelve los indices de velas de 5m donde hay senal de compra."""
     cierres = [x["c"] for x in v5]
     r = rsi(cierres)
@@ -167,5 +168,88 @@ def calcular_senales(v5, v1h, fng):
         dia_ant = (datetime.fromtimestamp(x["t"] / 1000, timezone.utc) - timedelta(days=1)).date()
         if fng is not None and fng.get(dia_ant, 50) > FNG_MAX:
             continue
+        if btc is not None and not btc_ok(btc_cambios(btc, x["fin"])):
+            continue
+        if funding is not None:
+            f = valor_en(funding, x["fin"])
+            if f is not None and f > FUNDING_MAX:
+                continue
         senales.append((i, r[i], x["v"] / vol_media))
     return senales
+
+
+# ---------------- BTC y derivados ----------------
+BTC_1H_MIN = -0.015      # no comprar si BTC cayo mas de 1.5% en la ultima hora
+BTC_4H_MIN = -0.03       # ... o mas de 3% en 4 horas
+BTC_VENTA_1H = -0.025    # con posicion abierta: aviso de venta si BTC cae 2.5% en 1 hora
+FUNDING_MAX = 0.0005     # 0.05% cada 8 h: demasiados apostando al alza (lo normal es 0.01%)
+FAPI = "https://fapi.binance.com"
+
+
+def velas_btc(intervalo="5m", limite=1000, fin_ms=None):
+    global PAR
+    original, PAR = PAR, "BTCUSDT"
+    try:
+        return velas(intervalo, limite, fin_ms)
+    finally:
+        PAR = original
+
+
+def btc_cambios(btc, hasta_ms):
+    """Cambio de BTC en la ultima 1 h y 4 h, usando velas de 5m cerradas hasta 'hasta_ms'."""
+    import bisect
+    fins = btc.get("_fins")
+    if fins is None:
+        fins = btc["_fins"] = [x["fin"] for x in btc["velas"]]
+    k = bisect.bisect_right(fins, hasta_ms) - 1
+    v = btc["velas"]
+    if k < 48:
+        return None, None
+    return v[k]["c"] / v[k - 12]["c"] - 1, v[k]["c"] / v[k - 48]["c"] - 1
+
+
+def btc_ok(cambios):
+    c1, c4 = cambios
+    if c1 is None:
+        return True
+    return c1 >= BTC_1H_MIN and c4 >= BTC_4H_MIN
+
+
+def valor_en(serie, hasta_ms):
+    """serie = lista ordenada de (tiempo_ms, valor). Devuelve el ultimo valor conocido."""
+    import bisect
+    k = bisect.bisect_right([t for t, _ in serie], hasta_ms) - 1
+    return serie[k][1] if k >= 0 else None
+
+
+def funding_historial(desde_ms):
+    out, inicio = [], desde_ms
+    while True:
+        lote = http_json(f"{FAPI}/fapi/v1/fundingRate?symbol={PAR}&limit=1000&startTime={inicio}")
+        if not lote:
+            break
+        out += [(int(x["fundingTime"]), float(x["fundingRate"])) for x in lote]
+        if len(lote) < 1000:
+            break
+        inicio = int(lote[-1]["fundingTime"]) + 1
+    return out
+
+
+def derivados_ahora():
+    """Funding actual y cambio del open interest en 24 h. Si Binance Futures no responde
+    (por ejemplo desde servidores de EE.UU.), usa OKX para el funding."""
+    out = {"funding": None, "oi_cambio_24h": None, "fuente": None}
+    try:
+        out["funding"] = float(http_json(f"{FAPI}/fapi/v1/premiumIndex?symbol={PAR}")["lastFundingRate"])
+        out["fuente"] = "Binance Futures"
+        oi = http_json(f"{FAPI}/futures/data/openInterestHist?symbol={PAR}&period=1h&limit=25")
+        if len(oi) >= 25:
+            out["oi_cambio_24h"] = float(oi[-1]["sumOpenInterestValue"]) / float(oi[0]["sumOpenInterestValue"]) - 1
+    except Exception:
+        try:
+            d = http_json("https://www.okx.com/api/v5/public/funding-rate?instId=XRP-USDT-SWAP")["data"][0]
+            out["funding"] = float(d["fundingRate"])
+            out["fuente"] = "OKX"
+        except Exception:
+            pass
+    return out

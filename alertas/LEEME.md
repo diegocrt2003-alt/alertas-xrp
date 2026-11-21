@@ -13,13 +13,16 @@ Tu bot Renko + filtros nuevos:
 - Tendencia de 1 hora no en derrumbe
 - Fear & Greed no en codicia extrema (75 o menos)
 - Sin noticias negativas de XRP en las últimas 24 h
+- Bitcoin no cayendo fuerte (no más de -1.5% en 1 h ni -3% en 4 h)
+- Funding de futuros no muy alto (máx. 0.05% cada 8 h; datos públicos de Binance Futures u OKX)
 
 TP +2.5% y SL -1.2%. En Binance pon una orden **OCO** con esos dos precios para que venda sola.
 
 ## Avisos de venta
 Escríbele a tu bot: `/compre` (o `/compre 0.9100`) cuando compres, `/vendi` cuando vendas,
 `/estado` para ver cómo vas. Con posición abierta te avisa "VENDE AHORA" si toca TP o SL,
-salen 2 ladrillos Renko rojos, se derrumba la tendencia de 1 hora o hay noticia mala.
+salen 2 ladrillos Renko rojos, se derrumba la tendencia de 1 hora, Bitcoin cae 2.5% en 1 hora
+o hay noticia mala.
 Revisa cada 10 minutos todo el día (las compras solo en tu horario).
 
 ## Archivos

@@ -61,9 +61,20 @@ if __name__ == "__main__":
     cambio = v5[-1]["c"] / v5[0]["c"] - 1
     print(f"XRP en ese tiempo: {cambio:+.1%}\n")
 
-    for pct in (0.005, 0.01, 0.022):
-        for tend, usar_fng, nombre in ((False, False, "tu bot original"),
-                                       (True, True, "con tendencia 1h + Fear&Greed")):
-            senal.LADRILLO_PCT, senal.USAR_TENDENCIA = pct, tend
-            s = senal.calcular_senales(v5, v1h, fng if usar_fng else None)
-            resumen(f"ladrillo {pct:.1%} {nombre}", simular(v5, s))
+    print("Bajando BTC y funding...")
+    btc = {"velas": [x for x in []]}
+    original = senal.PAR
+    senal.PAR = "BTCUSDT"
+    btc["velas"] = bajar("5m", desde - 5 * 3600_000)
+    senal.PAR = original
+    funding = senal.funding_historial(desde - 8 * 3600_000)
+    print(f"Funding: {len(funding)} registros, maximo {max(f for _, f in funding):.4%}\n")
+
+    senal.LADRILLO_PCT, senal.USAR_TENDENCIA = 0.005, False
+    resumen("tu bot original (ladrillo 0.5%)", simular(v5, senal.calcular_senales(v5, v1h, None)))
+    senal.USAR_TENDENCIA = True
+    for nombre, b, f in (("+ tendencia 1h + Fear&Greed", None, None),
+                         ("  + filtro BTC", btc, None),
+                         ("  + filtro funding", None, funding),
+                         ("  + BTC + funding (todo)", btc, funding)):
+        resumen(nombre, simular(v5, senal.calcular_senales(v5, v1h, fng, b, f)))

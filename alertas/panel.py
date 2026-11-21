@@ -40,6 +40,33 @@ def noticias(maximo=10):
     return (xrp + resto)[:maximo]
 
 
+def filtros_nuevos(v5, btc, deriv):
+    out = []
+    c1, c4 = senal.btc_cambios(btc, v5[-1]["fin"]) if btc else (None, None)
+    if c1 is not None:
+        ok = senal.btc_ok((c1, c4))
+        out.append({
+            "nombre": "Bitcoin no se está cayendo", "ok": ok,
+            "valor": {"1h": round(c1, 4), "4h": round(c4, 4)},
+            "detalle": f"BTC {c1:+.1%} en 1 h y {c4:+.1%} en 4 h. "
+                       + ("Tranquilo: cuando BTC no cae, XRP tiene más chance de subir." if ok
+                          else "BTC está cayendo fuerte y XRP casi siempre lo sigue: mejor esperar."),
+        })
+    f = deriv.get("funding") if deriv else None
+    if f is not None:
+        ok = f <= senal.FUNDING_MAX
+        oi = deriv.get("oi_cambio_24h")
+        extra = f" El dinero apostado en futuros cambió {oi:+.1%} en 24 h." if oi is not None else ""
+        out.append({
+            "nombre": "Futuros sin euforia (funding)", "ok": ok, "valor": f,
+            "detalle": f"Funding {f:+.3%} ({deriv['fuente']}). "
+                       + ("Normal: no hay demasiada gente apostando al alza." if ok
+                          else "Muy alto: demasiados apostando a que sube; suele venir una bajada.")
+                       + extra,
+        })
+    return out
+
+
 def filtros(v5, v1h, fng):
     """Estado de cada condicion en la ultima vela cerrada, explicado en simple."""
     cierres = [x["c"] for x in v5]
@@ -87,7 +114,7 @@ def filtros(v5, v1h, fng):
     ]
 
 
-def exportar(estado, v5, v1h, fng):
+def exportar(estado, v5, v1h, fng, btc=None, deriv=None):
     cierres = [x["c"] for x in v5]
     rsi = senal.rsi(cierres)
     ev = senal.renko_eventos(cierres, senal.LADRILLO_PCT)
@@ -109,7 +136,7 @@ def exportar(estado, v5, v1h, fng):
         "renko": renko,
         "ladrillo_pct": senal.LADRILLO_PCT,
         "fng": [{"dia": d.isoformat(), "v": v} for d, v in fng_hist],
-        "filtros": filtros(v5, v1h, fng),
+        "filtros": filtros(v5, v1h, fng) + filtros_nuevos(v5, btc, deriv),
         "noticias": noticias(),
         "posicion": None if not pos else {
             "precio": pos["precio"], "desde": pos["desde"],
