@@ -16,6 +16,12 @@ Tu bot Renko + filtros nuevos:
 
 TP +2.5% y SL -1.2%. En Binance pon una orden **OCO** con esos dos precios para que venda sola.
 
+## Avisos de venta
+Escríbele a tu bot: `/compre` (o `/compre 0.9100`) cuando compres, `/vendi` cuando vendas,
+`/estado` para ver cómo vas. Con posición abierta te avisa "VENDE AHORA" si toca TP o SL,
+salen 2 ladrillos Renko rojos, se derrumba la tendencia de 1 hora o hay noticia mala.
+Revisa cada 10 minutos todo el día (las compras solo en tu horario).
+
 ## Archivos
 - `senal.py`: la lógica de la señal (los números se cambian arriba del archivo)
 - `alerta.py`: revisa ahora y manda el aviso
