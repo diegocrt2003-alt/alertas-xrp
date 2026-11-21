@@ -12,6 +12,7 @@ import json
 import os
 import sys
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
@@ -30,8 +31,19 @@ def enviar(texto):
     if not (token and chat):
         print("(Sin TELEGRAM_TOKEN / TELEGRAM_CHAT_ID: no se envio a Telegram)")
         return
+    token, chat = token.strip(), chat.strip()
     datos = urllib.parse.urlencode({"chat_id": chat, "text": texto}).encode()
-    urllib.request.urlopen(f"https://api.telegram.org/bot{token}/sendMessage", datos, timeout=20)
+    try:
+        urllib.request.urlopen(f"https://api.telegram.org/bot{token}/sendMessage", datos, timeout=20)
+        print("Mensaje enviado a Telegram.")
+    except urllib.error.HTTPError as e:
+        detalle = e.read().decode(errors="ignore")
+        print(f"ERROR de Telegram ({e.code}): {detalle}")
+        if e.code == 401:
+            print("-> El TELEGRAM_TOKEN esta mal. Copialo de nuevo desde @BotFather.")
+        elif e.code in (400, 403):
+            print("-> Revisa TELEGRAM_CHAT_ID (solo el numero) y que hayas presionado Iniciar en tu bot.")
+        sys.exit(1)
 
 
 def main():
