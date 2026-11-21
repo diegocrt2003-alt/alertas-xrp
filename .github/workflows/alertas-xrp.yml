@@ -4,7 +4,12 @@ on:
   schedule:
     # Cada 10 min en horario Peru 9-12 y 15-20 (en UTC: 14-16 y 20-00)
     - cron: "*/10 14-16,20-23,0 * * *"
-  workflow_dispatch: {}   # boton para correrlo a mano
+  workflow_dispatch:      # boton "Run workflow" para correrlo a mano
+    inputs:
+      prueba:
+        description: "Mandar solo un mensaje de prueba a Telegram"
+        type: boolean
+        default: true
 
 permissions:
   contents: write   # para guardar alertas/estado.json y no repetir avisos
@@ -27,7 +32,12 @@ jobs:
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python alerta.py
+        run: |
+          if [ "${{ inputs.prueba }}" = "true" ]; then
+            python alerta.py --prueba
+          else
+            python alerta.py
+          fi
       - name: Guardar estado
         run: |
           if [ -n "$(git status --porcelain alertas/estado.json)" ]; then
