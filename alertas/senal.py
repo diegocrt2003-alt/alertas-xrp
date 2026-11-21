@@ -252,4 +252,10 @@ def derivados_ahora():
             out["fuente"] = "OKX"
         except Exception:
             pass
+        try:  # open interest de OKX en USD, lo mas nuevo primero
+            oi = http_json("https://www.okx.com/api/v5/rubik/stat/contracts/open-interest-volume"
+                           "?ccy=XRP&period=1H")["data"]
+            out["oi_cambio_24h"] = float(oi[0][1]) / float(oi[24][1]) - 1
+        except Exception:
+            pass
     return out
