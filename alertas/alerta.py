@@ -24,6 +24,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import panel
+import semanal
 import senal
 
 MONTO_USDT = 18
@@ -101,8 +102,29 @@ def niveles(precio):
 def procesar_comandos(estado, precio_actual):
     for texto in leer_mensajes(estado):
         partes = texto.lower().replace(",", ".").split()
-        cmd = partes[0].lstrip("/").replace("Ã©", "e") if partes else ""
-        if cmd in ("compre", "compra"):
+        cmd = partes[0].lstrip("/").replace("é", "e").split("@")[0] if partes else ""
+        if cmd in ("compre_semanal", "compresemanal"):
+            try:
+                precio = float(partes[1])
+            except (IndexError, ValueError):
+                precio = estado.get("sem_ultima_alerta_precio") or precio_actual
+            estado["posicion_semanal"] = {"precio": precio, "desde": int(time.time() * 1000),
+                                          "maximo": precio, "avisos": []}
+            anotar(estado, "compre", "SEMANAL: anotaste una compra", precio)
+            enviar(f"Anotado (SEMANAL): compraste XRP a {precio:.4f}.\n"
+                   f"SL {precio * (1 - semanal.SL_SEM):.4f} (-{semanal.SL_SEM:.0%}). Trailing: cuando llegue a "
+                   f"{precio * (1 + semanal.TRAIL_ACTIVA):.4f} (+5%), vende si baja 5% desde el maximo.\n"
+                   "Cuando vendas escribe /vendi_semanal")
+        elif cmd in ("vendi_semanal", "vendisemanal"):
+            ps = estado.get("posicion_semanal")
+            if ps:
+                g = precio_actual / ps["precio"] - 1
+                enviar(f"Anotado (SEMANAL): vendiste. Resultado aprox. {g:+.2%} (sin comisiones).")
+                anotar(estado, "vendi", f"SEMANAL: anotaste la venta ({g:+.2%})", precio_actual)
+            else:
+                enviar("No tenia anotada ninguna compra SEMANAL, pero ok.")
+            estado["posicion_semanal"] = None
+        elif cmd in ("compre", "compra"):
             try:
                 precio = float(partes[1])
             except (IndexError, ValueError):
@@ -129,8 +151,13 @@ def procesar_comandos(estado, precio_actual):
                        f"({precio_actual / p['precio'] - 1:+.2%}).\nTP {tp:.4f} | SL {sl:.4f}")
             else:
                 enviar(f"Sin posicion. XRP ahora {precio_actual:.4f}. Buscando compras en tu horario.")
+            ps = estado.get("posicion_semanal")
+            if ps:
+                enviar(f"SEMANAL abierta a {ps['precio']:.4f}. Ahora {precio_actual:.4f} "
+                       f"({precio_actual / ps['precio'] - 1:+.2%}). Maximo {ps['maximo']:.4f}.")
         else:
-            enviar("Comandos: /compre [precio], /vendi, /estado")
+            enviar("Comandos: /compre [precio], /vendi, /estado\n"
+                   "Modo SEMANAL: /compre_semanal [precio], /vendi_semanal")
 
 
 # ---------------- Venta ----------------
@@ -221,10 +248,74 @@ def revisar_compra(estado, v5, v1h, fng, ahora, btc, deriv):
     anotar(estado, "compra", f"COMPRA AHORA (RSI {rsi_val:.0f}, volumen {vol_x:.1f}x)", precio)
 
 
+# ---------------- Modo SEMANAL ----------------
+def revisar_semanal(estado, v5, ahora):
+    """Devuelve info para el panel: condiciones del ultimo dia cerrado."""
+    d = [x for x in semanal.velas_diarias("XRPUSDT", limite=200) if x["fin"] < ahora]
+    btc_d = [x for x in semanal.velas_diarias("BTCUSDT", limite=10) if x["fin"] < ahora]
+    rsi = senal.rsi([x["c"] for x in d])
+    conds = semanal.evaluar(d, len(d) - 1, rsi, btc_d)
+    precio = v5[-1]["c"]
+    ps = estado.get("posicion_semanal")
+
+    if ps:
+        nuevos_max = [x["h"] for x in v5 if x["t"] >= ps["desde"]]
+        ps["maximo"] = max([ps["maximo"]] + nuevos_max)
+        motivos = semanal.revisar_salida(ps["precio"], ps["maximo"], precio, ps["desde"], ahora)
+        nuevos = [(k, t) for k, t in motivos if k not in ps["avisos"]]
+        if nuevos:
+            enviar(f"VENDE AHORA (SEMANAL) XRP/USDT\n\nCompraste a {ps['precio']:.4f}, ahora {precio:.4f} "
+                   f"({precio / ps['precio'] - 1:+.2%}).\n\nPor que:\n"
+                   + "\n".join(f"- {t}" for _, t in nuevos)
+                   + "\n\nCuando vendas escribe /vendi_semanal")
+            ps["avisos"].extend(k for k, _ in nuevos)
+            anotar(estado, "vende", "SEMANAL VENDE: " + " ".join(t for _, t in nuevos), precio)
+    else:
+        dia = d[-1]
+        if all(c["ok"] for c in conds) and estado.get("sem_ultima_senal") != dia["t"] \
+                and ahora - dia["fin"] < 3 * 3_600_000:
+            mala = senal.noticia_mala()
+            if mala:
+                print(f"SEMANAL: habia senal pero hay noticia negativa: {mala}")
+            else:
+                e = dia["c"]
+                enviar(
+                    "COMPRA AHORA (SEMANAL) XRP/USDT\n\n"
+                    f"Entrada: ~{e:.4f} USDT\n"
+                    f"Stop loss: {e * (1 - semanal.SL_SEM):.4f} (-{semanal.SL_SEM:.0%})\n"
+                    f"Trailing: cuando suba a {e * (1 + semanal.TRAIL_ACTIVA):.4f} (+5%), vende si baja 5% "
+                    "desde el maximo. Maximo 20 dias.\n"
+                    f"Monto sugerido: {MONTO_USDT} USDT\n\n"
+                    "Por que: " + " ".join(c["detalle"] for c in conds) + "\n\n"
+                    "En Binance puedes usar una orden 'Trailing Stop' de 5% para que venda sola.\n"
+                    "Si compras, escribeme /compre_semanal (o /compre_semanal PRECIO)."
+                )
+                estado["sem_ultima_senal"] = dia["t"]
+                estado["sem_ultima_alerta_precio"] = e
+                anotar(estado, "compra", "COMPRA AHORA (SEMANAL)", e)
+        else:
+            print("SEMANAL: sin senal.")
+    return {
+        "dia": d[-1]["t"],
+        "filtros": conds,
+        "posicion": None if not ps else {
+            "precio": ps["precio"], "desde": ps["desde"], "maximo": ps["maximo"],
+            "sl": ps["precio"] * (1 - semanal.SL_SEM),
+            "trail_activa": ps["precio"] * (1 + semanal.TRAIL_ACTIVA),
+            "trail_stop": ps["maximo"] * (1 - semanal.TRAIL)
+            if ps["maximo"] >= ps["precio"] * (1 + semanal.TRAIL_ACTIVA) else None,
+            "dias": (ahora - ps["desde"]) / semanal.DIA_MS,
+        },
+        "reglas": {"caida": semanal.CAIDA_MIN, "rsi": semanal.RSI_MAX, "sl": semanal.SL_SEM,
+                   "trail": semanal.TRAIL, "dias": semanal.DIAS_MAX},
+    }
+
+
 def main():
     if "--prueba" in sys.argv:
         enviar("Prueba OK: las alertas de XRP funcionan.\n"
-               "Comandos: /compre [precio], /vendi, /estado")
+               "Comandos: /compre [precio], /vendi, /estado\n"
+               "Modo SEMANAL: /compre_semanal [precio], /vendi_semanal")
         return
 
     ahora = int(time.time() * 1000)
@@ -247,11 +338,16 @@ def main():
         revisar_venta(estado, v5, v1h, btc)
     else:
         revisar_compra(estado, v5, v1h, fng, ahora, btc, deriv)
+    try:
+        info_sem = revisar_semanal(estado, v5, ahora)
+    except Exception as e:
+        print(f"SEMANAL: error {e}")
+        info_sem = None
     # Cambia una vez al dia: asi GitHub ve actividad y no apaga el horario a los 60 dias
     estado["ultimo_dia_revisado"] = datetime.now(senal.PERU).date().isoformat()
     guardar_estado(estado)
     try:
-        panel.exportar(estado, v5, v1h, fng, btc, deriv)
+        panel.exportar(estado, v5, v1h, fng, btc, deriv, info_sem)
         print("Panel actualizado (docs/datos.json).")
     except Exception as e:
         print(f"No pude actualizar el panel: {e}")

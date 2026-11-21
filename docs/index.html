@@ -77,6 +77,14 @@ details p{margin:8px 0;color:var(--muted);font-size:14px}
 
   <div class="banner b-blue" id="banner">Cargando…</div>
 
+  <div class="card" id="sem-card" hidden>
+    <h2>Modo SEMANAL <span class="tag t-xrp">compra caídas fuertes y aguanta días</span></h2>
+    <div class="banner" id="sem-banner" style="margin-bottom:10px"></div>
+    <div class="pos-num" id="sem-pos" style="margin-bottom:10px"></div>
+    <div id="sem-filtros"></div>
+    <p class="muted" id="sem-reglas"></p>
+  </div>
+
   <div class="card" id="pos-card" hidden>
     <h2>Tu posición</h2>
     <div class="pos-num" id="pos"></div>
@@ -195,6 +203,33 @@ function pintar(d){
       <div><span class="muted">SL (corta la pérdida)</span><b class="down">${fmt(d.posicion.sl)}</b></div>
       <div><span class="muted">Desde</span><b>${horaPeru(d.posicion.desde)}</b></div>`;
   } else $("pos-card").hidden = true;
+
+  // Modo SEMANAL
+  const s = d.semanal;
+  if (s){
+    $("sem-card").hidden = false;
+    const sb = $("sem-banner"), sok = s.filtros.filter(f => f.ok).length;
+    if (s.posicion){
+      const p = s.posicion, g = d.precio / p.precio - 1;
+      sb.className = "banner " + (g >= 0 ? "b-green" : "b-red");
+      sb.innerHTML = `Posición SEMANAL abierta: ${pct(g)}<small>Día ${Math.floor(p.dias) + 1} de ${s.reglas.dias}. Cuando vendas escribe /vendi_semanal.</small>`;
+      $("sem-pos").innerHTML = `
+        <div><span class="muted">Compraste a</span><b>${fmt(p.precio)}</b></div>
+        <div><span class="muted">Máximo alcanzado</span><b>${fmt(p.maximo)}</b></div>
+        <div><span class="muted">Stop loss</span><b class="down">${fmt(p.sl)}</b></div>
+        <div><span class="muted">${p.trail_stop ? "Trailing (vende si baja a)" : "Trailing se activa en"}</span><b class="up">${fmt(p.trail_stop || p.trail_activa)}</b></div>`;
+    } else {
+      sb.className = "banner " + (sok === s.filtros.length ? "b-green" : sok >= s.filtros.length - 1 ? "b-amber" : "b-blue");
+      sb.innerHTML = sok === s.filtros.length
+        ? `Condiciones SEMANAL cumplidas<small>Revisa tu Telegram: entrada, stop y trailing.</small>`
+        : `Sin señal SEMANAL: ${sok} de ${s.filtros.length} condiciones<small>Este modo espera caídas grandes; salen unas 6 veces al año. Se revisa con el cierre diario (19:00 hora Perú).</small>`;
+      $("sem-pos").innerHTML = "";
+    }
+    $("sem-filtros").innerHTML = s.filtros.map(f => `
+      <div class="filtro"><div class="dot ${f.ok ? "ok" : "no"}"></div>
+      <div><b>${esc(f.nombre)}</b><span>${esc(f.detalle)}</span></div></div>`).join("");
+    $("sem-reglas").textContent = `Reglas: compra si XRP cae ${Math.abs(s.reglas.caida * 100)}% o más desde su máximo de 14 días con RSI diario bajo ${s.reglas.rsi}. Vende con trailing de ${s.reglas.trail * 100}% (se activa al ganar 5%), stop de -${s.reglas.sl * 100}% o a los ${s.reglas.dias} días. En la prueba 2024-2026: 13 operaciones, 11 ganadas, +47%.`;
+  }
 
   // Filtros
   $("filtros").innerHTML = d.filtros.map(f => `

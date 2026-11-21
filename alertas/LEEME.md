@@ -36,3 +36,7 @@ Revisa cada 10 minutos todo el día (las compras solo en tu horario).
 python alertas/alerta.py
 python alertas/probar_pasado.py
 ```
+
+## Modo SEMANAL
+Compra cuando XRP cae 20% o más desde su máximo de 14 días, con RSI diario bajo 35 y BTC sin desplomarse (revisa al cierre diario, 19:00 hora Perú). Vende con trailing de 5% (se activa al ganar 5%), stop -12% o a los 20 días.
+Comandos: /compre_semanal [precio] y /vendi_semanal. Backtest: python alertas/probar_semanal.py (2024-2026: 13 operaciones, 11 ganadas, +47%).

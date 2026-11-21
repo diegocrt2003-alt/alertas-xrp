@@ -114,7 +114,7 @@ def filtros(v5, v1h, fng):
     ]
 
 
-def exportar(estado, v5, v1h, fng, btc=None, deriv=None):
+def exportar(estado, v5, v1h, fng, btc=None, deriv=None, semanal=None):
     cierres = [x["c"] for x in v5]
     rsi = senal.rsi(cierres)
     ev = senal.renko_eventos(cierres, senal.LADRILLO_PCT)
@@ -143,6 +143,7 @@ def exportar(estado, v5, v1h, fng, btc=None, deriv=None):
             "tp": pos["precio"] * (1 + senal.TP_PCT), "sl": pos["precio"] * (1 - senal.SL_PCT),
         },
         "historial": estado.get("historial", [])[-20:],
+        "semanal": semanal,
         "config": {"tp": senal.TP_PCT, "sl": senal.SL_PCT, "par": "XRP/USDT"},
     }
     SALIDA.parent.mkdir(parents=True, exist_ok=True)
