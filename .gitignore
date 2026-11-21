@@ -1,0 +1,7 @@
+# No subir datos, registros ni la config con contraseñas
+user_data/*
+!user_data/strategies/
+user_data/strategies/__pycache__/
+__pycache__/
+*.pyc
+.env

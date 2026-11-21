@@ -1,0 +1,39 @@
+name: Alertas XRP
+
+on:
+  schedule:
+    # Cada 10 min en horario Peru 9-12 y 15-20 (en UTC: 14-16 y 20-00)
+    - cron: "*/10 14-16,20-23,0 * * *"
+  workflow_dispatch: {}   # boton para correrlo a mano
+
+permissions:
+  contents: write   # para guardar alertas/estado.json y no repetir avisos
+
+concurrency:
+  group: alertas-xrp
+  cancel-in-progress: false
+
+jobs:
+  revisar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Revisar senal
+        working-directory: alertas
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python alerta.py
+      - name: Guardar estado
+        run: |
+          if [ -n "$(git status --porcelain alertas/estado.json)" ]; then
+            git config user.name "alertas-bot"
+            git config user.email "alertas-bot@users.noreply.github.com"
+            git add alertas/estado.json
+            git commit -m "estado de alertas"
+            git push
+          fi
