@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Panel XRP</title>
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+:root{
+  --bg:#f6f7f9; --card:#ffffff; --text:#17202a; --muted:#66707a; --line:#e3e6ea;
+  --green:#12a150; --red:#d93a3a; --amber:#c98a00; --blue:#2f6fde;
+  --green-bg:#e7f6ee; --red-bg:#fdecec; --amber-bg:#fdf5e1; --blue-bg:#e9f0fd;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0f1318; --card:#171c23; --text:#e8ecf0; --muted:#9aa4ae; --line:#28303a;
+    --green:#3ccf7e; --red:#ff6b6b; --amber:#f0b429; --blue:#6b9cff;
+    --green-bg:#14301f; --red-bg:#3a1a1a; --amber-bg:#3a2f12; --blue-bg:#18264a;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:1000px;margin:0 auto;padding:16px}
+h1{font-size:20px;margin:0}
+h2{font-size:16px;margin:0 0 10px}
+.muted{color:var(--muted);font-size:13px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px}
+.top{display:flex;flex-wrap:wrap;gap:12px;align-items:baseline;justify-content:space-between}
+.precio{font-size:34px;font-weight:700;font-variant-numeric:tabular-nums}
+.chg{font-weight:600;margin-left:8px}
+.up{color:var(--green)} .down{color:var(--red)}
+.banner{border-radius:12px;padding:14px 16px;font-weight:600;margin-bottom:14px}
+.banner small{display:block;font-weight:400;margin-top:4px;color:var(--text)}
+.b-green{background:var(--green-bg);color:var(--green)}
+.b-red{background:var(--red-bg);color:var(--red)}
+.b-amber{background:var(--amber-bg);color:var(--amber)}
+.b-blue{background:var(--blue-bg);color:var(--blue)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media (max-width:760px){.grid{grid-template-columns:1fr}}
+.filtro{display:flex;gap:10px;padding:9px 0;border-top:1px solid var(--line)}
+.filtro:first-of-type{border-top:0}
+.dot{flex:0 0 14px;height:14px;border-radius:50%;margin-top:4px}
+.dot.ok{background:var(--green)} .dot.no{background:var(--red)}
+.filtro b{display:block;font-size:14px}
+.filtro span{font-size:13px;color:var(--muted)}
+#grafico,#rsi{width:100%}
+.renko{display:flex;align-items:flex-end;gap:2px;height:120px;overflow:hidden;padding-top:4px}
+.renko svg{width:100%;height:120px}
+.fng{display:flex;align-items:center;gap:16px}
+.fng-num{font-size:40px;font-weight:700;width:70px;text-align:center}
+.barra{height:10px;border-radius:5px;background:linear-gradient(90deg,var(--red),var(--amber),var(--green));position:relative;margin:6px 0}
+.marca{position:absolute;top:-4px;width:4px;height:18px;background:var(--text);border-radius:2px}
+.noticia{padding:8px 0;border-top:1px solid var(--line);font-size:14px}
+.noticia:first-of-type{border-top:0}
+.noticia a{color:var(--text);text-decoration:none}
+.noticia a:hover{text-decoration:underline}
+.tag{display:inline-block;font-size:11px;font-weight:600;padding:1px 7px;border-radius:8px;margin-right:6px}
+.t-xrp{background:var(--blue-bg);color:var(--blue)} .t-mala{background:var(--red-bg);color:var(--red)}
+.hist{font-size:14px;padding:6px 0;border-top:1px solid var(--line)}
+.hist:first-of-type{border-top:0}
+.pos-num{display:flex;gap:18px;flex-wrap:wrap;font-variant-numeric:tabular-nums}
+.pos-num div b{display:block;font-size:18px}
+details summary{cursor:pointer;font-weight:600}
+details p{margin:8px 0;color:var(--muted);font-size:14px}
+.err{color:var(--red)}
+</style>
+</head>
+<body>
+<main>
+  <div class="card top">
+    <div>
+      <h1>XRP / USDT</h1>
+      <div><span class="precio" id="precio">—</span><span class="chg" id="chg"></span></div>
+    </div>
+    <div class="muted" id="act">Cargando…</div>
+  </div>
+
+  <div class="banner b-blue" id="banner">Cargando…</div>
+
+  <div class="card" id="pos-card" hidden>
+    <h2>Tu posición</h2>
+    <div class="pos-num" id="pos"></div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>¿Por qué hay o no hay señal?</h2>
+      <div id="filtros"></div>
+    </div>
+    <div class="card">
+      <h2>Ladrillos Renko (cada uno = <span id="lad"></span> de movimiento)</h2>
+      <div class="renko" id="renko"></div>
+      <p class="muted">Verde = el precio subió un ladrillo, rojo = bajó. La señal de compra necesita 2 verdes seguidos; con posición abierta, 2 rojos seguidos es aviso de venta.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Precio últimas 24 h (velas de 5 min) y volumen</h2>
+    <div id="grafico"></div>
+    <p class="muted">Las barras de abajo son el volumen: cuando una barra es mucho más alta que las demás, alguien compró o vendió fuerte.</p>
+  </div>
+
+  <div class="card">
+    <h2>RSI (qué tan caro o barato está)</h2>
+    <div id="rsi"></div>
+    <p class="muted">Arriba de 65 suele estar caro, abajo de 35 está cayendo fuerte. La señal busca la zona del medio.</p>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Fear &amp; Greed (miedo o codicia del mercado)</h2>
+      <div class="fng">
+        <div class="fng-num" id="fng-num">—</div>
+        <div style="flex:1">
+          <div id="fng-txt"><b>—</b></div>
+          <div class="barra"><div class="marca" id="fng-marca"></div></div>
+          <div class="muted" style="display:flex;justify-content:space-between"><span>Miedo extremo</span><span>Codicia extrema</span></div>
+        </div>
+      </div>
+      <svg id="fng-hist" width="100%" height="60" style="margin-top:10px"></svg>
+      <p class="muted">Últimos 30 días. Con miedo la gente vende barato; con codicia extrema todo está caro y el bot no compra.</p>
+    </div>
+    <div class="card">
+      <h2>Noticias recientes</h2>
+      <div id="noticias"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Historial de alertas</h2>
+    <div id="historial"></div>
+  </div>
+
+  <div class="card">
+    <details>
+      <summary>¿Cómo funciona esto?</summary>
+      <p>Cada 10 minutos GitHub revisa XRP con datos públicos de Binance y actualiza esta página. Si todas las luces del semáforo están en verde te llega un “COMPRA AHORA” a Telegram con entrada, TP y SL.</p>
+      <p>Cuando compres escribe <b>/compre</b> a tu bot; desde ahí vigila la posición y te avisa “VENDE AHORA” si toca TP o SL, salen 2 ladrillos rojos, se derrumba la tendencia o hay una noticia mala. Cuando vendas escribe <b>/vendi</b>.</p>
+      <p>Esto no adivina el futuro: solo junta señales públicas. Pon siempre tu stop loss y no metas más de lo que puedes perder.</p>
+    </details>
+  </div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const fmt = (n, d = 4) => n == null ? "—" : Number(n).toFixed(d);
+const pct = n => (n >= 0 ? "+" : "") + (n * 100).toFixed(2) + "%";
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const horaPeru = ms => new Date(ms).toLocaleString("es-PE", {timeZone: "America/Lima", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit"});
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+let chart, rsiChart;
+
+function fngTexto(v){
+  if (v == null) return "—";
+  if (v < 25) return "Miedo extremo";
+  if (v < 45) return "Miedo";
+  if (v <= 55) return "Neutral";
+  if (v <= 75) return "Codicia";
+  return "Codicia extrema";
+}
+
+function pintar(d){
+  const last = d.velas[d.velas.length - 1];
+  $("precio").textContent = fmt(d.precio);
+  if (d.cambio_24h != null){
+    $("chg").textContent = pct(d.cambio_24h) + " en 24 h";
+    $("chg").className = "chg " + (d.cambio_24h >= 0 ? "up" : "down");
+  }
+  $("act").textContent = "Actualizado: " + horaPeru(d.actualizado) + " (hora Perú)";
+
+  // Banner
+  const ok = d.filtros.filter(f => f.ok).length, total = d.filtros.length;
+  const b = $("banner");
+  const ultimo = (d.historial || []).slice(-1)[0];
+  if (d.posicion){
+    const g = d.precio / d.posicion.precio - 1;
+    b.className = "banner " + (g >= 0 ? "b-green" : "b-red");
+    b.innerHTML = `Tienes una posición abierta: ${pct(g)}<small>Estoy vigilando si conviene vender. Cuando vendas escribe /vendi a tu bot.</small>`;
+  } else if (ok === total){
+    b.className = "banner b-green";
+    b.innerHTML = `Todas las condiciones en verde: posible COMPRA<small>Revisa tu Telegram para entrada, TP y SL.</small>`;
+  } else {
+    b.className = "banner " + (ok >= total - 2 ? "b-amber" : "b-red");
+    b.innerHTML = `Sin señal de compra: ${ok} de ${total} condiciones en verde<small>Faltan: ${d.filtros.filter(f => !f.ok).map(f => f.nombre).join(", ")}.</small>`;
+  }
+
+  // Posicion
+  if (d.posicion){
+    $("pos-card").hidden = false;
+    const g = d.precio / d.posicion.precio - 1;
+    $("pos").innerHTML = `
+      <div><span class="muted">Compraste a</span><b>${fmt(d.posicion.precio)}</b></div>
+      <div><span class="muted">Ahora</span><b class="${g >= 0 ? "up" : "down"}">${fmt(d.precio)} (${pct(g)})</b></div>
+      <div><span class="muted">TP (vende con ganancia)</span><b class="up">${fmt(d.posicion.tp)}</b></div>
+      <div><span class="muted">SL (corta la pérdida)</span><b class="down">${fmt(d.posicion.sl)}</b></div>
+      <div><span class="muted">Desde</span><b>${horaPeru(d.posicion.desde)}</b></div>`;
+  } else $("pos-card").hidden = true;
+
+  // Filtros
+  $("filtros").innerHTML = d.filtros.map(f => `
+    <div class="filtro"><div class="dot ${f.ok ? "ok" : "no"}"></div>
+    <div><b>${esc(f.nombre)}</b><span>${esc(f.detalle)}</span></div></div>`).join("");
+
+  // Renko
+  $("lad").textContent = (d.ladrillo_pct * 100).toFixed(1) + "%";
+  const bricks = d.renko.slice(-40);
+  let y = 0, ys = [0];
+  bricks.forEach(r => { y += r.d; ys.push(y); });
+  const min = Math.min(...ys), max = Math.max(...ys), rango = Math.max(max - min, 1);
+  const W = 400, H = 120, bw = W / Math.max(bricks.length, 1), bh = (H - 4) / (rango + 1);
+  let lvl = 0, svg = "";
+  bricks.forEach((r, i) => {
+    const from = lvl, to = lvl + r.d; lvl = to;
+    const top = Math.max(from, to);
+    const yPix = (max - top) * bh + 2;
+    svg += `<rect x="${i * bw + 1}" y="${yPix}" width="${Math.max(bw - 2, 1)}" height="${bh - 1}" rx="2" fill="${r.d > 0 ? css("--green") : css("--red")}"/>`;
+  });
+  $("renko").innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${svg}</svg>`;
+
+  // Grafico de velas + volumen
+  const opts = {
+    autoSize: true, height: 320,
+    layout: {background: {color: "transparent"}, textColor: css("--muted")},
+    grid: {vertLines: {color: css("--line")}, horzLines: {color: css("--line")}},
+    timeScale: {timeVisible: true, borderColor: css("--line")},
+    rightPriceScale: {borderColor: css("--line")},
+    localization: {timeFormatter: t => horaPeru(t * 1000)},
+  };
+  if (!chart){
+    $("grafico").style.height = "320px";
+    chart = LightweightCharts.createChart($("grafico"), opts);
+    chart.velas = chart.addCandlestickSeries({upColor: css("--green"), downColor: css("--red"), borderVisible: false, wickUpColor: css("--green"), wickDownColor: css("--red"), priceFormat: {type: "price", precision: 4, minMove: 0.0001}});
+    chart.vol = chart.addHistogramSeries({priceScaleId: "vol", priceFormat: {type: "volume"}});
+    chart.priceScale("vol").applyOptions({scaleMargins: {top: 0.8, bottom: 0}});
+    chart.velas.priceScale().applyOptions({scaleMargins: {top: 0.05, bottom: 0.25}});
+  }
+  const t5 = v => Math.floor(v.t / 1000);
+  chart.velas.setData(d.velas.map(v => ({time: t5(v), open: v.o, high: v.h, low: v.l, close: v.c})));
+  chart.vol.setData(d.velas.map(v => ({time: t5(v), value: v.v, color: v.c >= v.o ? css("--green") + "88" : css("--red") + "88"})));
+  (chart.lineas || []).forEach(l => chart.velas.removePriceLine(l));
+  chart.lineas = [];
+  if (d.posicion){
+    chart.lineas.push(chart.velas.createPriceLine({price: d.posicion.precio, color: css("--blue"), lineWidth: 1, lineStyle: 2, title: "Compra"}));
+    chart.lineas.push(chart.velas.createPriceLine({price: d.posicion.tp, color: css("--green"), lineWidth: 1, lineStyle: 2, title: "TP"}));
+    chart.lineas.push(chart.velas.createPriceLine({price: d.posicion.sl, color: css("--red"), lineWidth: 1, lineStyle: 2, title: "SL"}));
+  }
+  const marcas = (d.historial || []).filter(h => h.tipo === "compra" || h.tipo === "vende")
+    .filter(h => h.t >= d.velas[0].t)
+    .map(h => ({time: Math.floor((h.t - h.t % 300000) / 1000) - 300, position: h.tipo === "compra" ? "belowBar" : "aboveBar",
+      color: h.tipo === "compra" ? css("--green") : css("--red"), shape: h.tipo === "compra" ? "arrowUp" : "arrowDown",
+      text: h.tipo === "compra" ? "COMPRA" : "VENDE"}));
+  chart.velas.setMarkers(marcas.sort((a, b) => a.time - b.time));
+  requestAnimationFrame(() => chart.timeScale().fitContent());
+
+  // RSI
+  if (!rsiChart){
+    $("rsi").style.height = "160px";
+    rsiChart = LightweightCharts.createChart($("rsi"), {...opts, height: 160});
+    rsiChart.linea = rsiChart.addLineSeries({color: css("--blue"), lineWidth: 2, priceLineVisible: false});
+    rsiChart.linea.createPriceLine({price: 65, color: css("--red"), lineWidth: 1, lineStyle: 2, title: "caro"});
+    rsiChart.linea.createPriceLine({price: 35, color: css("--green"), lineWidth: 1, lineStyle: 2, title: "barato"});
+  }
+  rsiChart.linea.setData(d.velas.map((v, i) => ({time: t5(v), value: d.rsi[i]})).filter(p => p.value != null));
+  requestAnimationFrame(() => rsiChart.timeScale().fitContent());
+
+  // Fear & Greed
+  const fv = d.fng.length ? d.fng[d.fng.length - 1].v : null;
+  $("fng-num").textContent = fv ?? "—";
+  $("fng-num").style.color = fv == null ? "" : fv < 45 ? css("--red") : fv <= 55 ? css("--amber") : css("--green");
+  $("fng-txt").innerHTML = `<b>${fngTexto(fv)}</b>`;
+  $("fng-marca").style.left = `calc(${fv ?? 50}% - 2px)`;
+  const hs = d.fng, hw = 100 / Math.max(hs.length, 1);
+  $("fng-hist").setAttribute("viewBox", "0 0 100 60");
+  $("fng-hist").setAttribute("preserveAspectRatio", "none");
+  $("fng-hist").innerHTML = hs.map((p, i) => {
+    const h = p.v * 0.58;
+    const c = p.v < 45 ? css("--red") : p.v <= 55 ? css("--amber") : css("--green");
+    return `<rect x="${i * hw + 0.3}" y="${60 - h}" width="${hw - 0.6}" height="${h}" fill="${c}"><title>${p.dia}: ${p.v}</title></rect>`;
+  }).join("");
+
+  // Noticias
+  $("noticias").innerHTML = d.noticias.length ? d.noticias.map(n => `
+    <div class="noticia">${n.xrp ? '<span class="tag t-xrp">XRP</span>' : ""}${n.negativa ? '<span class="tag t-mala">negativa</span>' : ""}
+    <a href="${esc(n.link)}" target="_blank" rel="noopener">${esc(n.titulo)}</a>
+    <div class="muted">${n.fecha ? horaPeru(n.fecha) : ""}</div></div>`).join("")
+    : '<p class="muted">No pude leer noticias esta vez.</p>';
+
+  // Historial
+  const hist = (d.historial || []).slice().reverse();
+  const icono = {compra: "🟢", vende: "🔴", compre: "✅", vendi: "💰"};
+  $("historial").innerHTML = hist.length ? hist.map(h => `
+    <div class="hist">${icono[h.tipo] || "•"} <b>${horaPeru(h.t)}</b> · ${esc(h.texto)} · ${fmt(h.precio)}</div>`).join("")
+    : '<p class="muted">Todavía no hubo alertas. Aparecerán aquí.</p>';
+}
+
+async function cargar(){
+  try {
+    const r = await fetch("datos.json?t=" + Date.now(), {cache: "no-store"});
+    pintar(await r.json());
+  } catch (e) {
+    $("act").innerHTML = '<span class="err">No pude cargar los datos todavía.</span>';
+  }
+}
+cargar();
+setInterval(cargar, 120000);
+</script>
+</body>
+</html>

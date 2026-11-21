@@ -41,10 +41,10 @@ jobs:
           fi
       - name: Guardar estado
         run: |
-          if [ -n "$(git status --porcelain alertas/estado.json)" ]; then
+          if [ -n "$(git status --porcelain alertas/estado.json docs/datos.json)" ]; then
             git config user.name "alertas-bot"
             git config user.email "alertas-bot@users.noreply.github.com"
-            git add alertas/estado.json
+            git add alertas/estado.json docs/datos.json
             git commit -m "estado de alertas"
             git pull --rebase
             git push

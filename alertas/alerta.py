@@ -1,4 +1,4 @@
-"""Alertas de XRP/USDT por Telegram: "COMPRA AHORA" y "VENDE AHORA".
+﻿"""Alertas de XRP/USDT por Telegram: "COMPRA AHORA" y "VENDE AHORA".
 No opera ni necesita claves de Binance: solo lee datos publicos.
 
 Le escribes a tu bot de Telegram:
@@ -23,6 +23,7 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
+import panel
 import senal
 
 MONTO_USDT = 18
@@ -87,6 +88,12 @@ def guardar_estado(estado):
     ESTADO.write_text(json.dumps(estado, indent=1))
 
 
+def anotar(estado, tipo, texto, precio):
+    estado.setdefault("historial", []).append(
+        {"t": int(time.time() * 1000), "tipo": tipo, "texto": texto, "precio": precio})
+    estado["historial"] = estado["historial"][-50:]
+
+
 def niveles(precio):
     return precio * (1 + senal.TP_PCT), precio * (1 - senal.SL_PCT)
 
@@ -94,13 +101,14 @@ def niveles(precio):
 def procesar_comandos(estado, precio_actual):
     for texto in leer_mensajes(estado):
         partes = texto.lower().replace(",", ".").split()
-        cmd = partes[0].lstrip("/").replace("é", "e") if partes else ""
+        cmd = partes[0].lstrip("/").replace("Ã©", "e") if partes else ""
         if cmd in ("compre", "compra"):
             try:
                 precio = float(partes[1])
             except (IndexError, ValueError):
                 precio = estado.get("ultima_alerta_precio") or precio_actual
             estado["posicion"] = {"precio": precio, "desde": int(time.time() * 1000), "avisos": []}
+            anotar(estado, "compre", "Anotaste una compra", precio)
             tp, sl = niveles(precio)
             enviar(f"Anotado: compraste XRP a {precio:.4f}.\nTP {tp:.4f} | SL {sl:.4f}\n"
                    "Te aviso si conviene vender. Cuando vendas escribe /vendi")
@@ -109,6 +117,7 @@ def procesar_comandos(estado, precio_actual):
                 p = estado["posicion"]["precio"]
                 enviar(f"Anotado: vendiste. Resultado aprox. {precio_actual / p - 1:+.2%} "
                        "(sin comisiones). Vuelvo a buscar compras.")
+                anotar(estado, "vendi", f"Anotaste la venta ({precio_actual / p - 1:+.2%})", precio_actual)
             else:
                 enviar("No tenia anotada ninguna compra, pero ok.")
             estado["posicion"] = None
@@ -167,6 +176,7 @@ def revisar_venta(estado, v5, v1h):
              + "\n\nCuando vendas escribe /vendi")
     enviar(texto)
     p["avisos"].extend(k for k, _ in nuevos)
+    anotar(estado, "vende", "VENDE AHORA: " + " ".join(t for _, t in nuevos), ahora_precio)
 
 
 # ---------------- Compra ----------------
@@ -202,6 +212,7 @@ def revisar_compra(estado, v5, v1h, fng, ahora):
     )
     estado["ultima_senal"] = vela["t"]
     estado["ultima_alerta_precio"] = precio
+    anotar(estado, "compra", f"COMPRA AHORA (RSI {rsi_val:.0f}, volumen {vol_x:.1f}x)", precio)
 
 
 def main():
@@ -227,6 +238,11 @@ def main():
     # Cambia una vez al dia: asi GitHub ve actividad y no apaga el horario a los 60 dias
     estado["ultimo_dia_revisado"] = datetime.now(senal.PERU).date().isoformat()
     guardar_estado(estado)
+    try:
+        panel.exportar(estado, v5, v1h, fng)
+        print("Panel actualizado (docs/datos.json).")
+    except Exception as e:
+        print(f"No pude actualizar el panel: {e}")
 
 
 if __name__ == "__main__":
